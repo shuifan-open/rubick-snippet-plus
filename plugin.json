@@ -1,0 +1,21 @@
+{
+  "pluginName": "snippet-plus",
+  "description": "Markdown snippet search and paste automation for Rubick",
+  "main": "./index.html",
+  "author": "pfy",
+  "version": "1.0.0",
+  "logo": "./logo.png",
+  "preload": "./preload.js",
+  "features": [
+    {
+      "code": "snippet_search",
+      "explain": "snippet search",
+      "cmds": ["snippet"]
+    },
+    {
+      "code": "snippet_setting",
+      "explain": "snippet setting",
+      "cmds": ["sniSetting"]
+    }
+  ]
+}

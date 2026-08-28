@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>snippet-plus</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #fff;
+      color: #333;
+      width: 100vw;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .pane { padding: 6px 0; }
+    .hidden { display: none; }
+
+    h2 { font-size: 15px; color: #222; padding: 14px 20px 6px; }
+    .status {
+      padding: 14px 20px;
+      color: #888;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+    .msg { padding: 12px 20px; font-size: 12px; color: #999; }
+    #list { list-style: none; }
+    #list li {
+      padding: 8px 20px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+    #list li.active, #list li:hover {
+      background: #f4f3fb;
+      border-left-color: #6750d9;
+    }
+    #list li .t { font-size: 14px; font-weight: 500; }
+    #list li .d {
+      font-size: 12px;
+      color: #888;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="setting" class="pane hidden">
+    <h2>设置 markdown 目录 / 文件路径</h2>
+    <div class="status">在上方输入框输入路径，按 Enter 保存。支持目录（递归扫描 .md）或单个 .md 文件。</div>
+    <div id="setting-current" class="msg"></div>
+  </div>
+
+  <div id="search" class="pane hidden">
+    <div id="status" class="status hidden"></div>
+    <ul id="list"></ul>
+  </div>
+
+  <script src="preload.js"></script>
+  <script>
+    var currentCode = null
+    var snippets = []
+    var listEl = document.getElementById('list')
+    var statusEl = document.getElementById('status')
+    var activeIndex = -1
+
+    // 需要手动维护当前搜索词（来自 rubick 子输入框 onChange）
+    var currentWord = ''
+
+    function show(id) {
+      document.getElementById('setting').classList.add('hidden')
+      document.getElementById('search').classList.add('hidden')
+      document.getElementById(id).classList.remove('hidden')
+    }
+
+    function getFiltered() {
+      return searchSnippets(snippets, currentWord)
+    }
+
+    function renderList() {
+      var filtered = getFiltered()
+      listEl.innerHTML = ''
+      activeIndex = -1
+      filtered.forEach(function (item, idx) {
+        var li = document.createElement('li')
+        li.innerHTML = '<div class="t"></div><div class="d"></div>'
+        li.querySelector('.t').textContent = item.title
+        li.querySelector('.d').textContent = (item.description || '').split('\n')[0]
+        li.addEventListener('click', function () { doPaste(item) })
+        li.addEventListener('mouseenter', function () { setActive(idx) })
+        listEl.appendChild(li)
+      })
+    }
+
+    function setActive(idx) {
+      var filtered = getFiltered()
+      activeIndex = Math.max(0, Math.min(idx, filtered.length - 1))
+      var items = listEl.children
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle('active', i === activeIndex)
+      }
+    }
+
+    function doPaste(item) {
+      pasteSnippet(item.description)
+    }
+
+    // ================= settings =================
+    function initSetting() {
+      show('setting')
+      // 先注册 onChange，再预填（setSubInputValue 会同步触发 onChange）
+      rubickApi.setSubInput(function (ref) {
+        currentWord = (ref && ref.text) || ''
+      }, 'markdown dir path')
+      var saved = rubickApi.dbGet('markdown_path')
+      if (saved) {
+        rubickApi.setSubInputValue(saved)
+        document.getElementById('setting-current').textContent = '当前路径：' + saved
+      } else {
+        document.getElementById('setting-current').textContent = '尚未设置路径'
+      }
+    }
+
+    // ================= search =================
+    function initSearch() {
+      show('search')
+      var mdPath = rubickApi.dbGet('markdown_path')
+      if (!mdPath) {
+        statusEl.textContent = 'Please set markdown dir or file path (run sniSetting)'
+        statusEl.classList.remove('hidden')
+        return
+      }
+      try {
+        snippets = loadSnippets(mdPath)
+        statusEl.classList.add('hidden')
+        renderList()
+      } catch (e) {
+        statusEl.textContent = 'Read markdown failed: ' + e.message
+        statusEl.classList.remove('hidden')
+      }
+      rubickApi.setSubInput(function (ref) {
+        currentWord = (ref && ref.text) || ''
+        renderList()
+      }, 'Search')
+    }
+
+    // ================= entry =================
+    rubickApi.onPluginReady(function (env) {
+      currentCode = env && env.code
+      if (currentCode === 'snippet_setting') initSetting()
+      else initSearch()
+    })
+
+    // Rubick 会把主输入框/子输入框的按键事件转发到本插件 webview（sendInputEvent），
+    // 因此在 document 上监听 keydown 即可处理 上下/回车。
+    document.addEventListener('keydown', function (e) {
+      var key = e.key
+      var code = e.keyCode
+      if (currentCode === 'snippet_setting') {
+        if (key === 'Enter' || code === 13) {
+          var val = currentWord.trim()
+          if (!val) return
+          if (!validatePath(val)) {
+            rubickApi.showNotification('Not a valid markdown dir or file path')
+            return
+          }
+          rubickApi.dbSet('markdown_path', val)
+          rubickApi.showNotification('markdown 路径已保存')
+          rubickApi.hideMainWindow()
+        }
+      } else {
+        if (key === 'ArrowDown' || code === 40) {
+          e.preventDefault()
+          setActive(activeIndex + 1)
+        } else if (key === 'ArrowUp' || code === 38) {
+          e.preventDefault()
+          setActive(activeIndex - 1)
+        } else if (key === 'Enter' || code === 13) {
+          e.preventDefault()
+          var f = getFiltered()
+          if (f[activeIndex]) doPaste(f[activeIndex])
+          else if (f[0]) doPaste(f[0])
+        }
+      }
+    })
+  </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "@pfy/rubick-snippet-plus",
+  "pluginType": "ui",
+  "pluginName": "snippet-plus",
+  "description": "Markdown snippet search and paste automation for Rubick",
+  "author": "pfy",
+  "version": "1.0.0",
+  "main": "index.html",
+  "preload": "preload.js",
+  "homePage": "https://github.com/bit-ranger/utools-snippet",
+  "logo": "logo.png",
+  "features": [
+    {
+      "code": "snippet_search",
+      "explain": "snippet search",
+      "cmds": ["snippet"]
+    },
+    {
+      "code": "snippet_setting",
+      "explain": "snippet setting",
+      "cmds": ["sniSetting"]
+    }
+  ]
+}
